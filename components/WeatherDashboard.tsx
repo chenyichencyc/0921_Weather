@@ -1,9 +1,22 @@
 "use client";
 import React, { useState, useEffect, useMemo, useCallback } from "react";
+import dynamic from "next/dynamic";
 import { ForecastRecord, TAIWAN_CITIES } from "@/types/weather";
 import TemperatureCards from "./TemperatureCards";
 import TemperatureChart from "./TemperatureChart";
 import ForecastTable from "./ForecastTable";
+
+// 使用 dynamic import 禁用 Leaflet 的 SSR，防止 "window is not defined"
+const TaiwanMap = dynamic(() => import("./TaiwanMap"), {
+  ssr: false,
+  loading: () => (
+    <div className="h-[450px] rounded-2xl bg-white/70 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700 flex items-center justify-center text-slate-400">
+      <div className="flex items-center gap-2 text-sm font-medium">
+        <span className="animate-spin text-lg">🌀</span> 初始化 GIS 互動地圖中...
+      </div>
+    </div>
+  ),
+});
 
 export default function WeatherDashboard() {
   // 狀態管理
@@ -99,7 +112,6 @@ export default function WeatherDashboard() {
     cityForecasts.forEach((f) => {
       const key = `${f.forecastStart}__${f.forecastEnd}`;
       if (!map.has(key)) {
-        // 格式化時段顯示標籤
         const formatTime = (ts: string) => {
           const [d, t] = ts.split(" ");
           const dp = d.split("-");
@@ -257,6 +269,16 @@ export default function WeatherDashboard() {
               </h2>
             </div>
             <TemperatureCards record={currentCityRecord} city={selectedCity} />
+          </section>
+
+          {/* GIS 互動地圖 (Milestone 5) */}
+          <section>
+            <TaiwanMap
+              weatherData={tableData}
+              selectedCity={selectedCity}
+              onSelectCity={handleCityChange}
+              intervalLabel={currentIntervalLabel}
+            />
           </section>
 
           {/* 溫度趨勢折線圖 */}

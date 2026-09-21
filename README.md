@@ -4,7 +4,7 @@
 
 ## 🌤️ 專案簡介
 
-本專案使用 Next.js (App Router) + TypeScript + Tailwind CSS 建立前端與 API，搭配 Python 腳本建立本機 SQLite 天氣資料管線，並提供互動式視覺化儀表板。
+本專案使用 Next.js (App Router) + TypeScript + Tailwind CSS 建立前端與 API，搭配 Python 腳本建立本機 SQLite 天氣資料管線，並提供整合 Leaflet GIS 地圖與 Recharts 圖表的視覺化儀表板。
 
 ## 🔑 CWA API 設定
 
@@ -20,6 +20,25 @@
    CWA_API_KEY=你的CWA授權碼
    ```
    > ⚠️ **資安注意**：`.env` 包含敏感金鑰，已設定於 `.gitignore` 中，請勿將包含真實金鑰的 `.env` 提交或推送到 GitHub 等公開儲存庫。
+
+## 🗺️ 台灣 GIS 互動地圖 (Milestone 5)
+
+- **Leaflet + GeoJSON 多邊形地圖**：繪製台灣 22 縣市完整行政區邊界。
+- **溫度著色規則 (avgTemp)**：
+  - `≥ 30°C`：紅色（炎熱）
+  - `25–29.9°C`：橘黃色（溫暖）
+  - `20–24.9°C`：綠色（舒適）
+  - `< 20°C`：藍色（偏涼）
+  - 無資料：灰色
+- **互動機制**：
+  - **Hover**：顯示縣市名稱、平均溫與天氣現象 Tooltip。
+  - **Click**：跳出詳細天氣 Popup，並連動儀表板（溫度卡片、折線圖與資料表）同步切換至該縣市。
+- **圖資來源與授權**：
+  - 資料集：台灣縣市行政邊界 GeoJSON (`twCounty2010.geo.json`)
+  - 來源：[g0v/twgeojson](https://github.com/g0v/twgeojson)（基於政府行政區劃開放資料整理）
+  - 授權條款：政府資料開放授權條款 (Open Government Data License) / CC0 / ODbL
+  - 使用日期：2026-09-21
+  - 本地儲存：`data/taiwan-cities.geojson` 及 `public/data/taiwan-cities.geojson`
 
 ## 📊 天氣儀表板 UI (Milestone 4)
 
