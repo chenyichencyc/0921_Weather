@@ -46,6 +46,68 @@ python scripts/init_sqlite.py
 python scripts/refresh_sqlite.py
 ```
 
+## 📡 本機網站 API 規格 (Milestone 3)
+
+> 💡 **說明**：此 SQLite API 供本機開發與學習使用（資料來源為 `data/weather.db`）。待 Milestone 6 雲端資料庫階段，將改用 Supabase PostgreSQL 以供 Vercel 公開部署。
+
+### 1. 取得指定日期全台天氣預報
+- **端點**：`GET /api/weather?date=YYYY-MM-DD`
+- **範例**：
+  ```bash
+  curl http://localhost:3000/api/weather?date=2026-09-21
+  ```
+- **回應範例**：
+  ```json
+  {
+    "count": 22,
+    "data": [
+      {
+        "id": 16,
+        "city": "臺北市",
+        "forecastStart": "2026-09-21 18:00:00",
+        "forecastEnd": "2026-09-22 06:00:00",
+        "forecastDate": "2026-09-21",
+        "minTemp": 23,
+        "maxTemp": 27,
+        "avgTemp": 25,
+        "weatherDescription": "晴時多雲",
+        "rainProbability": 0,
+        "sourceUpdatedAt": "2026-09-21T20:50:05.169881",
+        "createdAt": "2026-09-21 12:50:00"
+      }
+    ]
+  }
+  ```
+
+### 2. 取得指定縣市所有預報時段
+- **端點**：`GET /api/weather?city={縣市名稱}`
+- **範例**：
+  ```bash
+  curl "http://localhost:3000/api/weather?city=臺北市"
+  ```
+- **回應範例**：
+  ```json
+  {
+    "count": 3,
+    "data": [
+      {
+        "id": 16,
+        "city": "臺北市",
+        "forecastStart": "2026-09-21 18:00:00",
+        "forecastEnd": "2026-09-22 06:00:00",
+        "forecastDate": "2026-09-21",
+        "minTemp": 23,
+        "maxTemp": 27,
+        "avgTemp": 25,
+        "weatherDescription": "晴時多雲",
+        "rainProbability": 0,
+        "sourceUpdatedAt": "2026-09-21T20:50:05.169881",
+        "createdAt": "2026-09-21 12:50:00"
+      }
+    ]
+  }
+  ```
+
 ## 🚀 前端啟動方式 (Local Development)
 
 ### 1. 安裝前端相依套件
