@@ -2,9 +2,24 @@
 
 台灣天氣預報 GIS 儀表板，整合中央氣象署 (CWA) 開放資料、SQLite/PostgreSQL 資料庫與 Leaflet 地圖呈現。
 
-## 🌤️ 專案簡介 (Milestone 0: 專案骨架)
+## 🌤️ 專案簡介
 
 本專案使用 Next.js (App Router) + TypeScript + Tailwind CSS 建立。
+
+## 🔑 CWA API 設定
+
+本專案之天氣資料來源為**交通部中央氣象署開放資料平台**。
+
+1. 前往 [中央氣象署開放資料平台](https://opendata.cwa.gov.tw/) 註冊並取得個人的「氣象資料開放平台會員授權碼」（API Key）。
+2. 在專案根目錄建立 `.env` 檔案（或複製範本）：
+   ```bash
+   cp .env.example .env
+   ```
+3. 在 `.env` 中填入你的授權碼：
+   ```env
+   CWA_API_KEY=你的CWA授權碼
+   ```
+   > ⚠️ **資安注意**：`.env` 包含敏感金鑰，已設定於 `.gitignore` 中，請勿將包含真實金鑰的 `.env` 提交或推送到 GitHub 等公開儲存庫。
 
 ## 🚀 本機啟動方式 (Local Development)
 
@@ -13,14 +28,10 @@
 npm install
 ```
 
-### 2. 環境變數設定
-複製範本檔案並填入你的 CWA API Key：
+### 2. 驗證 CWA API 連線
+執行官方 API 檢查腳本，確認金鑰與回傳格式正常：
 ```bash
-cp .env.example .env
-```
-編輯 `.env`：
-```env
-CWA_API_KEY=你的CWA授權碼
+node scripts/inspect-cwa.mjs
 ```
 
 ### 3. 啟動開發伺服器
