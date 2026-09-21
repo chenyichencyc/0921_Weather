@@ -4,7 +4,7 @@
 
 ## 🌤️ 專案簡介
 
-本專案使用 Next.js (App Router) + TypeScript + Tailwind CSS 建立前端與 API，並搭配 Python 腳本建立本機 SQLite 天氣資料管線。
+本專案使用 Next.js (App Router) + TypeScript + Tailwind CSS 建立前端與 API，搭配 Python 腳本建立本機 SQLite 天氣資料管線，並提供互動式視覺化儀表板。
 
 ## 🔑 CWA API 設定
 
@@ -20,6 +20,14 @@
    CWA_API_KEY=你的CWA授權碼
    ```
    > ⚠️ **資安注意**：`.env` 包含敏感金鑰，已設定於 `.gitignore` 中，請勿將包含真實金鑰的 `.env` 提交或推送到 GitHub 等公開儲存庫。
+
+## 📊 天氣儀表板 UI (Milestone 4)
+
+- **三大控制項**：縣市選擇器、預報日期選擇器、預報時段選擇器。
+- **指標資訊卡 (TemperatureCards)**：即時呈現選定縣市與時段之最低溫、最高溫、平均溫、天氣現象與降雨機率。
+- **溫度走勢折線圖 (TemperatureChart)**：使用 Recharts 呈現選定縣市 36 小時逐時段高低氣溫變化與繁體中文互動 Tooltip。
+- **全台縣市預報總表 (ForecastTable)**：呈現選定時段下全台 22 縣市天氣指標，支援點擊切換縣市。
+- **狀態防護**：具備載入中 Skeleton、API 錯誤重試提示及資料庫未初始化導引。
 
 ## 🐍 Python 本機 SQLite 資料管線 (Milestone 2)
 
@@ -56,56 +64,12 @@ python scripts/refresh_sqlite.py
   ```bash
   curl http://localhost:3000/api/weather?date=2026-09-21
   ```
-- **回應範例**：
-  ```json
-  {
-    "count": 22,
-    "data": [
-      {
-        "id": 16,
-        "city": "臺北市",
-        "forecastStart": "2026-09-21 18:00:00",
-        "forecastEnd": "2026-09-22 06:00:00",
-        "forecastDate": "2026-09-21",
-        "minTemp": 23,
-        "maxTemp": 27,
-        "avgTemp": 25,
-        "weatherDescription": "晴時多雲",
-        "rainProbability": 0,
-        "sourceUpdatedAt": "2026-09-21T20:50:05.169881",
-        "createdAt": "2026-09-21 12:50:00"
-      }
-    ]
-  }
-  ```
 
 ### 2. 取得指定縣市所有預報時段
 - **端點**：`GET /api/weather?city={縣市名稱}`
 - **範例**：
   ```bash
   curl "http://localhost:3000/api/weather?city=臺北市"
-  ```
-- **回應範例**：
-  ```json
-  {
-    "count": 3,
-    "data": [
-      {
-        "id": 16,
-        "city": "臺北市",
-        "forecastStart": "2026-09-21 18:00:00",
-        "forecastEnd": "2026-09-22 06:00:00",
-        "forecastDate": "2026-09-21",
-        "minTemp": 23,
-        "maxTemp": 27,
-        "avgTemp": 25,
-        "weatherDescription": "晴時多雲",
-        "rainProbability": 0,
-        "sourceUpdatedAt": "2026-09-21T20:50:05.169881",
-        "createdAt": "2026-09-21 12:50:00"
-      }
-    ]
-  }
   ```
 
 ## 🚀 前端啟動方式 (Local Development)
