@@ -4,7 +4,7 @@
 
 ## 🌤️ 專案簡介
 
-本專案使用 Next.js (App Router) + TypeScript + Tailwind CSS 建立。
+本專案使用 Next.js (App Router) + TypeScript + Tailwind CSS 建立前端與 API，並搭配 Python 腳本建立本機 SQLite 天氣資料管線。
 
 ## 🔑 CWA API 設定
 
@@ -21,9 +21,34 @@
    ```
    > ⚠️ **資安注意**：`.env` 包含敏感金鑰，已設定於 `.gitignore` 中，請勿將包含真實金鑰的 `.env` 提交或推送到 GitHub 等公開儲存庫。
 
-## 🚀 本機啟動方式 (Local Development)
+## 🐍 Python 本機 SQLite 資料管線 (Milestone 2)
 
-### 1. 安裝相依套件
+### 1. 建立並啟用 Python 虛擬環境
+```bash
+python3 -m venv venv
+source venv/bin/activate  # macOS / Linux
+# 或 Windows: venv\Scripts\activate
+```
+
+### 2. 安裝 Python 套件
+```bash
+pip install -r requirements.txt
+```
+
+### 3. 初始化 SQLite 資料庫
+建立 `data/weather.db` 與 `forecasts` 資料表：
+```bash
+python scripts/init_sqlite.py
+```
+
+### 4. 抓取 CWA 最新預報並寫入資料庫 (Upsert)
+```bash
+python scripts/refresh_sqlite.py
+```
+
+## 🚀 前端啟動方式 (Local Development)
+
+### 1. 安裝前端相依套件
 ```bash
 npm install
 ```

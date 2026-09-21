@@ -25,6 +25,8 @@ venv/
 env/
 *.db
 *.sqlite3
+data/*.db
+data/*.sqlite3
 
 # IDE & OS
 .DS_Store

@@ -93,17 +93,21 @@ SQLite 和 PostgreSQL 都使用相同概念的 `forecasts` 資料表。
 CREATE TABLE forecasts (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   city TEXT NOT NULL,
+  forecast_start TEXT NOT NULL,
+  forecast_end TEXT NOT NULL,
   forecast_date TEXT NOT NULL,
   min_temp REAL NOT NULL,
   max_temp REAL NOT NULL,
   avg_temp REAL NOT NULL,
+  weather_description TEXT,
+  rain_probability INTEGER,
   source_updated_at TEXT,
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  UNIQUE(city, forecast_date)
+  UNIQUE(city, forecast_start, forecast_end)
 );
 ```
 
-同一縣市、同一預報日期只能保留一筆資料。資料更新時使用 upsert，避免重複插入。
+同一縣市、同一預報時段（`forecast_start`, `forecast_end`）只能保留一筆資料。資料更新時使用 upsert，依據 `UNIQUE(city, forecast_start, forecast_end)` 覆蓋更新，避免重複插入。
 
 SQLite 是本機學習與課程作業成果。Vercel 不適合長期寫入 SQLite，因此公開部署版使用 Supabase PostgreSQL。
 
