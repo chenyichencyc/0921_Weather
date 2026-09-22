@@ -1,6 +1,5 @@
 -- ==============================================================================
--- 台灣天氣 GIS 儀表板 - Supabase PostgreSQL 初始化腳本 (Milestone 6)
--- 說明：請在 Supabase Dashboard -> SQL Editor 中貼上並執行此腳本。
+-- 台灣天氣 GIS 儀表板 - Supabase PostgreSQL 初始化腳本 (Milestone 6.1)
 -- ==============================================================================
 
 -- 1. 建立預報資料表 (forecasts)
@@ -25,11 +24,15 @@ CREATE INDEX IF NOT EXISTS idx_forecasts_city ON forecasts(city);
 CREATE INDEX IF NOT EXISTS idx_forecasts_date ON forecasts(forecast_date);
 CREATE INDEX IF NOT EXISTS idx_forecasts_start ON forecasts(forecast_start);
 
--- 3. 設定 Row Level Security (RLS) - 允許公開讀取 (SELECT)
+-- 3. 設定 Row Level Security (RLS) - 允許讀取與 Python 資料管線寫入
 ALTER TABLE forecasts ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "Allow public read-only access on forecasts" 
-ON forecasts 
-FOR SELECT 
-TO anon, authenticated 
-USING (true);
+DROP POLICY IF EXISTS "Allow public read and write on forecasts" ON forecasts;
+DROP POLICY IF EXISTS "Allow public read-only access on forecasts" ON forecasts;
+
+CREATE POLICY "Allow public read and write on forecasts"
+ON forecasts
+FOR ALL
+TO anon, authenticated
+USING (true)
+WITH CHECK (true);

@@ -1,5 +1,6 @@
 import Database from "better-sqlite3";
 import { Pool } from "pg";
+import { createClient, SupabaseClient } from "@supabase/supabase-js";
 import fs from "fs";
 import path from "path";
 import { ForecastRecord } from "@/types/weather";
@@ -21,8 +22,20 @@ interface RawDbRow {
 
 const DB_PATH = path.resolve(process.cwd(), "data", "weather.db");
 
-// 檢查是否配置雲端 PostgreSQL (Supabase / Neon / Vercel Postgres)
+// 雲端資料庫配置 (支援 Supabase REST API 與 PostgreSQL Connection URI)
+const SUPABASE_URL = process.env.SUPABASE_URL;
+const SUPABASE_KEY =
+  process.env.SUPABASE_SERVICE_ROLE_KEY ||
+  process.env.SUPABASE_ANON_KEY ||
+  process.env.SUPABASE_KEY;
 const DATABASE_URL = process.env.DATABASE_URL || process.env.POSTGRES_URL;
+
+let supabaseClient: SupabaseClient | null = null;
+if (SUPABASE_URL && SUPABASE_KEY) {
+  supabaseClient = createClient(SUPABASE_URL, SUPABASE_KEY, {
+    auth: { persistSession: false },
+  });
+}
 
 let pgPool: Pool | null = null;
 if (DATABASE_URL) {
@@ -35,18 +48,30 @@ if (DATABASE_URL) {
 }
 
 /**
- * 檢查資料庫連線準備狀態（PostgreSQL 優先，其次本機 SQLite）
+ * 檢查資料庫連線準備狀態
  */
 export async function isDatabaseReady(): Promise<boolean> {
+  if (supabaseClient) {
+    try {
+      const { error } = await supabaseClient
+        .from("forecasts")
+        .select("*", { count: "exact", head: true });
+      if (!error) return true;
+    } catch {
+      // 若 Supabase 連線或表格未建立則檢查其他模式
+    }
+  }
+
   if (pgPool) {
     try {
       const client = await pgPool.connect();
       client.release();
       return true;
     } catch {
-      return false;
+      // fallback
     }
   }
+
   return fs.existsSync(DB_PATH);
 }
 
@@ -74,7 +99,21 @@ function formatRow(row: RawDbRow): ForecastRecord {
  * 查詢指定日期 (YYYY-MM-DD) 的全台天氣預報
  */
 export async function getForecastsByDate(date: string): Promise<ForecastRecord[]> {
-  // 1. 若配置了雲端 PostgreSQL
+  // 1. Supabase Client 優先
+  if (supabaseClient) {
+    const { data, error } = await supabaseClient
+      .from("forecasts")
+      .select("*")
+      .eq("forecast_date", date)
+      .order("city", { ascending: true })
+      .order("forecast_start", { ascending: true });
+
+    if (!error && data) {
+      return (data as RawDbRow[]).map(formatRow);
+    }
+  }
+
+  // 2. PostgreSQL 連線池查詢
   if (pgPool) {
     const res = await pgPool.query<RawDbRow>(
       `SELECT id, city, forecast_start, forecast_end, forecast_date,
@@ -88,7 +127,7 @@ export async function getForecastsByDate(date: string): Promise<ForecastRecord[]
     return res.rows.map(formatRow);
   }
 
-  // 2. 本機 SQLite 查詢
+  // 3. 本機 SQLite 查詢
   if (!fs.existsSync(DB_PATH)) {
     throw new Error("DB_NOT_FOUND");
   }
@@ -113,7 +152,20 @@ export async function getForecastsByDate(date: string): Promise<ForecastRecord[]
  * 查詢指定縣市的所有預報時段
  */
 export async function getForecastsByCity(city: string): Promise<ForecastRecord[]> {
-  // 1. 若配置了雲端 PostgreSQL
+  // 1. Supabase Client 優先
+  if (supabaseClient) {
+    const { data, error } = await supabaseClient
+      .from("forecasts")
+      .select("*")
+      .eq("city", city)
+      .order("forecast_start", { ascending: true });
+
+    if (!error && data) {
+      return (data as RawDbRow[]).map(formatRow);
+    }
+  }
+
+  // 2. PostgreSQL 連線池查詢
   if (pgPool) {
     const res = await pgPool.query<RawDbRow>(
       `SELECT id, city, forecast_start, forecast_end, forecast_date,
@@ -127,7 +179,7 @@ export async function getForecastsByCity(city: string): Promise<ForecastRecord[]
     return res.rows.map(formatRow);
   }
 
-  // 2. 本機 SQLite 查詢
+  // 3. 本機 SQLite 查詢
   if (!fs.existsSync(DB_PATH)) {
     throw new Error("DB_NOT_FOUND");
   }
