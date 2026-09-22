@@ -29,11 +29,12 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  // 2. 檢查資料庫是否已初始化
-  if (!isDatabaseReady()) {
+  // 2. 檢查資料庫是否已就緒
+  const ready = await isDatabaseReady();
+  if (!ready) {
     return NextResponse.json(
       {
-        error: "資料庫尚未初始化，請先在本機執行 python scripts/init_sqlite.py 與 python scripts/refresh_sqlite.py 建立並更新資料庫。",
+        error: "資料庫尚未初始化或無法連線，請先在本機執行 python scripts/init_sqlite.py 與 python scripts/refresh_sqlite.py 建立並更新資料庫，或設定 DATABASE_URL 連線至雲端 PostgreSQL。",
       },
       { status: 503 }
     );
@@ -49,7 +50,7 @@ export async function GET(request: NextRequest) {
         );
       }
 
-      const records = getForecastsByDate(date);
+      const records = await getForecastsByDate(date);
       if (records.length === 0) {
         return NextResponse.json(
           { error: `找不到日期為 ${date} 的預報資料` },
@@ -73,7 +74,7 @@ export async function GET(request: NextRequest) {
         );
       }
 
-      const records = getForecastsByCity(trimmedCity);
+      const records = await getForecastsByCity(trimmedCity);
       if (records.length === 0) {
         return NextResponse.json(
           { error: `找不到縣市為「${trimmedCity}」的預報資料` },

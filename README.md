@@ -4,7 +4,7 @@
 
 ## 🌤️ 專案簡介
 
-本專案使用 Next.js (App Router) + TypeScript + Tailwind CSS 建立前端與 API，搭配 Python 腳本建立本機 SQLite 天氣資料管線，並提供整合 Leaflet GIS 地圖與 Recharts 圖表的視覺化儀表板。
+本專案使用 Next.js (App Router) + TypeScript + Tailwind CSS 建立前端與 API，本機支援 SQLite 輕量化開發，公開部署支援 Supabase PostgreSQL 雲端資料庫，並提供整合 Leaflet GIS 地圖與 Recharts 圖表的視覺化儀表板。
 
 ## 🔑 CWA API 設定
 
@@ -20,6 +20,28 @@
    CWA_API_KEY=你的CWA授權碼
    ```
    > ⚠️ **資安注意**：`.env` 包含敏感金鑰，已設定於 `.gitignore` 中，請勿將包含真實金鑰的 `.env` 提交或推送到 GitHub 等公開儲存庫。
+
+## ☁️ 雲端資料庫設定 (Supabase PostgreSQL - Milestone 6)
+
+本專案支援雙模式資料庫（Dual-Database Mode）：
+- **本機模式**：未設定 `DATABASE_URL` 時，自動使用本機 `data/weather.db` (SQLite)。
+- **雲端模式**：設定 `DATABASE_URL` 時，自動無縫切換為 Supabase PostgreSQL。
+
+### 1. 建立 Supabase 專案與資料表
+1. 註冊/登入 [Supabase](https://supabase.com/) 並建立新專案。
+2. 進入專案的 **SQL Editor**，開啟並執行專案內的 [`scripts/init_supabase.sql`](scripts/init_supabase.sql)。
+3. 在 Supabase **Project Settings -> Database** 複製 **Connection URI** (Transaction Pooler 或 Session Connection String)。
+
+### 2. 設定環境變數
+在 `.env` 或 Vercel Environment Variables 加入：
+```env
+DATABASE_URL=postgresql://postgres:[YOUR-PASSWORD]@db.[YOUR-PROJECT-REF].supabase.co:5432/postgres
+```
+
+### 3. 同步最新氣象資料至 Supabase
+```bash
+python scripts/refresh_supabase.py
+```
 
 ## 🗺️ 台灣 GIS 互動地圖 (Milestone 5)
 
@@ -73,9 +95,7 @@ python scripts/init_sqlite.py
 python scripts/refresh_sqlite.py
 ```
 
-## 📡 本機網站 API 規格 (Milestone 3)
-
-> 💡 **說明**：此 SQLite API 供本機開發與學習使用（資料來源為 `data/weather.db`）。待 Milestone 6 雲端資料庫階段，將改用 Supabase PostgreSQL 以供 Vercel 公開部署。
+## 📡 網站 API 規格 (Milestone 3)
 
 ### 1. 取得指定日期全台天氣預報
 - **端點**：`GET /api/weather?date=YYYY-MM-DD`
