@@ -22,7 +22,7 @@ interface RawDbRow {
 
 const DB_PATH = path.resolve(process.cwd(), "data", "weather.db");
 
-// 雲端資料庫配置 (支援 Supabase REST API 與 PostgreSQL Connection URI)
+// 雲端資料庫配置 (支援 Supabase 與 PostgreSQL Connection URI)
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY =
   process.env.SUPABASE_SERVICE_ROLE_KEY ||
@@ -51,22 +51,23 @@ if (DATABASE_URL) {
  * 檢查資料庫連線準備狀態
  */
 export async function isDatabaseReady(): Promise<boolean> {
-  if (supabaseClient) {
-    try {
-      const { error } = await supabaseClient
-        .from("forecasts")
-        .select("*", { count: "exact", head: true });
-      if (!error) return true;
-    } catch {
-      // 若 Supabase 連線或表格未建立則檢查其他模式
-    }
-  }
-
   if (pgPool) {
     try {
       const client = await pgPool.connect();
       client.release();
       return true;
+    } catch {
+      // fallback
+    }
+  }
+
+  if (supabaseClient) {
+    try {
+      const { data, error } = await supabaseClient
+        .from("forecasts")
+        .select("id")
+        .limit(1);
+      if (!error && data) return true;
     } catch {
       // fallback
     }
@@ -99,103 +100,129 @@ function formatRow(row: RawDbRow): ForecastRecord {
  * 查詢指定日期 (YYYY-MM-DD) 的全台天氣預報
  */
 export async function getForecastsByDate(date: string): Promise<ForecastRecord[]> {
-  // 1. Supabase Client 優先
-  if (supabaseClient) {
-    const { data, error } = await supabaseClient
-      .from("forecasts")
-      .select("*")
-      .eq("forecast_date", date)
-      .order("city", { ascending: true })
-      .order("forecast_start", { ascending: true });
-
-    if (!error && data) {
-      return (data as RawDbRow[]).map(formatRow);
+  // 1. PostgreSQL 連線池優先 (Bypasses RLS)
+  if (pgPool) {
+    try {
+      const res = await pgPool.query<RawDbRow>(
+        `SELECT id, city, forecast_start, forecast_end, forecast_date,
+                min_temp, max_temp, avg_temp, weather_description,
+                rain_probability, source_updated_at, created_at
+         FROM forecasts
+         WHERE forecast_date = $1
+         ORDER BY city ASC, forecast_start ASC`,
+        [date]
+      );
+      if (res.rows.length > 0) {
+        return res.rows.map(formatRow);
+      }
+    } catch {
+      // fallback to next datasource
     }
   }
 
-  // 2. PostgreSQL 連線池查詢
-  if (pgPool) {
-    const res = await pgPool.query<RawDbRow>(
-      `SELECT id, city, forecast_start, forecast_end, forecast_date,
-              min_temp, max_temp, avg_temp, weather_description,
-              rain_probability, source_updated_at, created_at
-       FROM forecasts
-       WHERE forecast_date = $1
-       ORDER BY city ASC, forecast_start ASC`,
-      [date]
-    );
-    return res.rows.map(formatRow);
+  // 2. Supabase Client
+  if (supabaseClient) {
+    try {
+      const { data, error } = await supabaseClient
+        .from("forecasts")
+        .select("*")
+        .eq("forecast_date", date)
+        .order("city", { ascending: true })
+        .order("forecast_start", { ascending: true });
+
+      if (!error && data && data.length > 0) {
+        return (data as RawDbRow[]).map(formatRow);
+      }
+    } catch {
+      // fallback
+    }
   }
 
   // 3. 本機 SQLite 查詢
-  if (!fs.existsSync(DB_PATH)) {
-    throw new Error("DB_NOT_FOUND");
+  if (fs.existsSync(DB_PATH)) {
+    const db = new Database(DB_PATH, { readonly: true, fileMustExist: true });
+    try {
+      const stmt = db.prepare<[string], RawDbRow>(`
+        SELECT id, city, forecast_start, forecast_end, forecast_date,
+               min_temp, max_temp, avg_temp, weather_description,
+               rain_probability, source_updated_at, created_at
+        FROM forecasts
+        WHERE forecast_date = ?
+        ORDER BY city ASC, forecast_start ASC
+      `);
+      const rows = stmt.all(date);
+      if (rows.length > 0) {
+        return rows.map(formatRow);
+      }
+    } finally {
+      db.close();
+    }
   }
-  const db = new Database(DB_PATH, { readonly: true, fileMustExist: true });
-  try {
-    const stmt = db.prepare<[string], RawDbRow>(`
-      SELECT id, city, forecast_start, forecast_end, forecast_date,
-             min_temp, max_temp, avg_temp, weather_description,
-             rain_probability, source_updated_at, created_at
-      FROM forecasts
-      WHERE forecast_date = ?
-      ORDER BY city ASC, forecast_start ASC
-    `);
-    const rows = stmt.all(date);
-    return rows.map(formatRow);
-  } finally {
-    db.close();
-  }
+
+  return [];
 }
 
 /**
  * 查詢指定縣市的所有預報時段
  */
 export async function getForecastsByCity(city: string): Promise<ForecastRecord[]> {
-  // 1. Supabase Client 優先
-  if (supabaseClient) {
-    const { data, error } = await supabaseClient
-      .from("forecasts")
-      .select("*")
-      .eq("city", city)
-      .order("forecast_start", { ascending: true });
-
-    if (!error && data) {
-      return (data as RawDbRow[]).map(formatRow);
+  // 1. PostgreSQL 連線池優先 (Bypasses RLS)
+  if (pgPool) {
+    try {
+      const res = await pgPool.query<RawDbRow>(
+        `SELECT id, city, forecast_start, forecast_end, forecast_date,
+                min_temp, max_temp, avg_temp, weather_description,
+                rain_probability, source_updated_at, created_at
+         FROM forecasts
+         WHERE city = $1
+         ORDER BY forecast_start ASC`,
+        [city]
+      );
+      if (res.rows.length > 0) {
+        return res.rows.map(formatRow);
+      }
+    } catch {
+      // fallback to next datasource
     }
   }
 
-  // 2. PostgreSQL 連線池查詢
-  if (pgPool) {
-    const res = await pgPool.query<RawDbRow>(
-      `SELECT id, city, forecast_start, forecast_end, forecast_date,
-              min_temp, max_temp, avg_temp, weather_description,
-              rain_probability, source_updated_at, created_at
-       FROM forecasts
-       WHERE city = $1
-       ORDER BY forecast_start ASC`,
-      [city]
-    );
-    return res.rows.map(formatRow);
+  // 2. Supabase Client
+  if (supabaseClient) {
+    try {
+      const { data, error } = await supabaseClient
+        .from("forecasts")
+        .select("*")
+        .eq("city", city)
+        .order("forecast_start", { ascending: true });
+
+      if (!error && data && data.length > 0) {
+        return (data as RawDbRow[]).map(formatRow);
+      }
+    } catch {
+      // fallback
+    }
   }
 
   // 3. 本機 SQLite 查詢
-  if (!fs.existsSync(DB_PATH)) {
-    throw new Error("DB_NOT_FOUND");
+  if (fs.existsSync(DB_PATH)) {
+    const db = new Database(DB_PATH, { readonly: true, fileMustExist: true });
+    try {
+      const stmt = db.prepare<[string], RawDbRow>(`
+        SELECT id, city, forecast_start, forecast_end, forecast_date,
+               min_temp, max_temp, avg_temp, weather_description,
+               rain_probability, source_updated_at, created_at
+        FROM forecasts
+        WHERE city = ?
+        ORDER BY forecast_start ASC
+      `);
+      const rows = stmt.all(city);
+      if (rows.length > 0) {
+        return rows.map(formatRow);
+      }
+    } finally {
+      db.close();
+    }
   }
-  const db = new Database(DB_PATH, { readonly: true, fileMustExist: true });
-  try {
-    const stmt = db.prepare<[string], RawDbRow>(`
-      SELECT id, city, forecast_start, forecast_end, forecast_date,
-             min_temp, max_temp, avg_temp, weather_description,
-             rain_probability, source_updated_at, created_at
-      FROM forecasts
-      WHERE city = ?
-      ORDER BY forecast_start ASC
-    `);
-    const rows = stmt.all(city);
-    return rows.map(formatRow);
-  } finally {
-    db.close();
-  }
+
+  return [];
 }

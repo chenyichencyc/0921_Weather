@@ -1,5 +1,9 @@
 -- ==============================================================================
--- 台灣天氣 GIS 儀表板 - Supabase PostgreSQL 初始化腳本 (Milestone 6.1)
+-- 台灣天氣 GIS 儀表板 - Supabase PostgreSQL 安全 RLS 初始化腳本
+-- 安全強化規範：
+-- 1. 啟用 Row Level Security (RLS)
+-- 2. 移除所有允許 public / anon 的存取政策 (防止匿名公開繞過 Next.js 存取 REST API)
+-- 3. 資料存取僅限 Next.js 伺服器端 (DATABASE_URL / Service Role) 與 Python 後台管線
 -- ==============================================================================
 
 -- 1. 建立預報資料表 (forecasts)
@@ -24,15 +28,11 @@ CREATE INDEX IF NOT EXISTS idx_forecasts_city ON forecasts(city);
 CREATE INDEX IF NOT EXISTS idx_forecasts_date ON forecasts(forecast_date);
 CREATE INDEX IF NOT EXISTS idx_forecasts_start ON forecasts(forecast_start);
 
--- 3. 設定 Row Level Security (RLS) - 允許讀取與 Python 資料管線寫入
+-- 3. 啟用 RLS 並移除所有公開存取 Policy
 ALTER TABLE forecasts ENABLE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS "Allow public read and write on forecasts" ON forecasts;
 DROP POLICY IF EXISTS "Allow public read-only access on forecasts" ON forecasts;
-
-CREATE POLICY "Allow public read and write on forecasts"
-ON forecasts
-FOR ALL
-TO anon, authenticated
-USING (true)
-WITH CHECK (true);
+DROP POLICY IF EXISTS "Allow anon select and upsert on forecasts" ON forecasts;
+DROP POLICY IF EXISTS "Enable read access for all users" ON forecasts;
+DROP POLICY IF EXISTS "Enable insert for authenticated users only" ON forecasts;
