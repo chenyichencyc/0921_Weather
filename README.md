@@ -21,24 +21,38 @@
    ```
    > ⚠️ **資安注意**：`.env` 包含敏感金鑰，已設定於 `.gitignore` 中，請勿將包含真實金鑰的 `.env` 提交或推送到 GitHub 等公開儲存庫。
 
+## 🚀 GitHub 與 Vercel 自動部署 (Milestone 7)
+
+本專案已完全設定好 Vercel CI/CD 自動部署流程：
+
+### 1. 在 Vercel 匯入 GitHub Repository
+1. 登入 [Vercel](https://vercel.com/)。
+2. 點擊 **Add New... -> Project**，匯入 `chenyichencyc/0921_Weather`。
+3. Framework Preset 選擇 **Next.js**，Root Directory 選擇 `./`。
+
+### 2. 設定 Vercel 環境變數 (Environment Variables)
+在 Vercel 部署設定中的 **Environment Variables** 新增以下變數：
+- `CWA_API_KEY`：你的中央氣象署授權碼
+- `SUPABASE_URL`：你的 Supabase 專案網址 (例: `https://xxxx.supabase.co`)
+- `SUPABASE_SERVICE_ROLE_KEY` (或 `SUPABASE_ANON_KEY`)：你的 Supabase API Key
+- 或 `DATABASE_URL`：PostgreSQL 連線字串 (例: `postgresql://postgres:pwd@...`)
+
+### 3. 自動部署驗證
+- 點擊 **Deploy**，Vercel 將自動執行 production build 並產生公開 Preview / Production 網址。
+- 未來每次對 `main` 分支執行 `git push`，Vercel 將自動觸發建置與更新上線！
+
 ## ☁️ 雲端資料庫設定 (Supabase PostgreSQL - Milestone 6)
 
 本專案支援雙模式資料庫（Dual-Database Mode）：
 - **本機模式**：未設定 `DATABASE_URL` 時，自動使用本機 `data/weather.db` (SQLite)。
-- **雲端模式**：設定 `DATABASE_URL` 時，自動無縫切換為 Supabase PostgreSQL。
+- **雲端模式**：設定 `SUPABASE_URL` 或 `DATABASE_URL` 時，自動無縫切換為 Supabase PostgreSQL。
 
 ### 1. 建立 Supabase 專案與資料表
 1. 註冊/登入 [Supabase](https://supabase.com/) 並建立新專案。
 2. 進入專案的 **SQL Editor**，開啟並執行專案內的 [`scripts/init_supabase.sql`](scripts/init_supabase.sql)。
-3. 在 Supabase **Project Settings -> Database** 複製 **Connection URI** (Transaction Pooler 或 Session Connection String)。
+3. 在 Supabase **Project Settings -> Database** 複製 **Connection URI** (或使用 **API** 頁面的 URL 與 Key)。
 
-### 2. 設定環境變數
-在 `.env` 或 Vercel Environment Variables 加入：
-```env
-DATABASE_URL=postgresql://postgres:[YOUR-PASSWORD]@db.[YOUR-PROJECT-REF].supabase.co:5432/postgres
-```
-
-### 3. 同步最新氣象資料至 Supabase
+### 2. 同步最新氣象資料至 Supabase
 ```bash
 python scripts/refresh_supabase.py
 ```
@@ -101,7 +115,7 @@ python scripts/refresh_sqlite.py
 - **端點**：`GET /api/weather?date=YYYY-MM-DD`
 - **範例**：
   ```bash
-  curl http://localhost:3000/api/weather?date=2026-09-21
+  curl http://localhost:3000/api/weather?date=2026-09-22
   ```
 
 ### 2. 取得指定縣市所有預報時段
@@ -111,7 +125,7 @@ python scripts/refresh_sqlite.py
   curl "http://localhost:3000/api/weather?city=臺北市"
   ```
 
-## 🚀 前端啟動方式 (Local Development)
+## 🚀 前端本機啟動方式 (Local Development)
 
 ### 1. 安裝前端相依套件
 ```bash
