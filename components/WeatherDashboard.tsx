@@ -46,21 +46,31 @@ export default function WeatherDashboard() {
       const records: ForecastRecord[] = json.data || [];
       setCityForecasts(records);
 
-      if (isInitial && records.length > 0) {
-        // 設定預設日期與預設時段
-        const firstRecord = records[0];
-        const defaultDate = firstRecord.forecastDate;
-        const defaultInterval = `${firstRecord.forecastStart}__${firstRecord.forecastEnd}`;
+      if (records.length > 0) {
+        // 過濾出目前有效（未過期）的預報紀錄
+        const now = Date.now();
+        const activeRecords = records.filter((f) => {
+          const endIso = f.forecastEnd.includes("T")
+            ? f.forecastEnd
+            : `${f.forecastEnd.replace(" ", "T")}+08:00`;
+          const endTs = new Date(endIso).getTime();
+          return !isNaN(endTs) ? endTs >= now - 3 * 3600 * 1000 : true;
+        });
 
-        setSelectedDate(defaultDate);
-        setSelectedIntervalKey(defaultInterval);
+        const targetRecord = activeRecords[0] || records[0];
+
+        // 若是初次載入或當前選取之日期已過期，自動同步至最新有效日期與時段
+        if (isInitial || !activeRecords.some((f) => f.forecastDate === selectedDate)) {
+          setSelectedDate(targetRecord.forecastDate);
+          setSelectedIntervalKey(`${targetRecord.forecastStart}__${targetRecord.forecastEnd}`);
+        }
       }
     } catch (err) {
       setErrorMsg((err as Error).message || "無法載入縣市天氣資料");
     } finally {
       setIsLoadingCity(false);
     }
-  }, []);
+  }, [selectedDate]);
 
   // 2. 載入選定日期的全台預報資料
   const fetchDateData = useCallback(async (date: string) => {
@@ -85,7 +95,8 @@ export default function WeatherDashboard() {
   // 第一次掛載時執行初始流程
   useEffect(() => {
     fetchCityData("臺北市", true);
-  }, [fetchCityData]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // 當 selectedDate 變更時，抓取該日期的全台資料
   useEffect(() => {
@@ -100,16 +111,29 @@ export default function WeatherDashboard() {
     fetchCityData(newCity, false);
   };
 
-  // 從 cityForecasts 計算可用日期選單
-  const availableDates = useMemo(() => {
-    const dates = Array.from(new Set(cityForecasts.map((f) => f.forecastDate)));
-    return dates;
+  // 過濾出目前有效（未過期）的預報紀錄
+  const activeCityForecasts = useMemo(() => {
+    const now = Date.now();
+    const active = cityForecasts.filter((f) => {
+      const endIso = f.forecastEnd.includes("T")
+        ? f.forecastEnd
+        : `${f.forecastEnd.replace(" ", "T")}+08:00`;
+      const endTs = new Date(endIso).getTime();
+      return !isNaN(endTs) ? endTs >= now - 3 * 3600 * 1000 : true;
+    });
+    return active.length > 0 ? active : cityForecasts;
   }, [cityForecasts]);
 
-  // 計算可用時段選單
+  // 從 activeCityForecasts 計算可用日期選單（僅顯示當前有效預報日期）
+  const availableDates = useMemo(() => {
+    const dates = Array.from(new Set(activeCityForecasts.map((f) => f.forecastDate)));
+    return dates;
+  }, [activeCityForecasts]);
+
+  // 計算可用時段選單（僅顯示當前有效預報時段）
   const availableIntervals = useMemo(() => {
     const map = new Map<string, { key: string; label: string; start: string; end: string; date: string }>();
-    cityForecasts.forEach((f) => {
+    activeCityForecasts.forEach((f) => {
       const key = `${f.forecastStart}__${f.forecastEnd}`;
       if (!map.has(key)) {
         const formatTime = (ts: string) => {
@@ -128,7 +152,7 @@ export default function WeatherDashboard() {
       }
     });
     return Array.from(map.values());
-  }, [cityForecasts]);
+  }, [activeCityForecasts]);
 
   // 當使用者選取時段時，自動同步對應的 date
   const handleIntervalChange = (newKey: string) => {
@@ -150,14 +174,14 @@ export default function WeatherDashboard() {
 
   // 取得目前選定縣市在選定時段下的即時紀錄
   const currentCityRecord = useMemo(() => {
-    if (!selectedIntervalKey) return cityForecasts[0] || null;
+    if (!selectedIntervalKey) return activeCityForecasts[0] || null;
     const [start, end] = selectedIntervalKey.split("__");
     return (
-      cityForecasts.find((f) => f.forecastStart === start && f.forecastEnd === end) ||
-      cityForecasts[0] ||
+      activeCityForecasts.find((f) => f.forecastStart === start && f.forecastEnd === end) ||
+      activeCityForecasts[0] ||
       null
     );
-  }, [cityForecasts, selectedIntervalKey]);
+  }, [activeCityForecasts, selectedIntervalKey]);
 
   // 取得選定時段下的全台各縣市列表（過濾時段）
   const tableData = useMemo(() => {
@@ -283,7 +307,7 @@ export default function WeatherDashboard() {
 
           {/* 溫度趨勢折線圖 */}
           <section>
-            <TemperatureChart data={cityForecasts} city={selectedCity} />
+            <TemperatureChart data={activeCityForecasts} city={selectedCity} />
           </section>
 
           {/* 全台縣市預報總表 */}
