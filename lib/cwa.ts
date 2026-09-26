@@ -56,8 +56,7 @@ export async function fetchCwaForecasts(apiKey: string): Promise<ParsedCwaRecord
     headers: {
       Accept: "application/json",
     },
-    // 快取策略：由伺服器端控制或每隔 10 分鐘重新驗證
-    next: { revalidate: 600 },
+    cache: "no-store",
   });
 
   if (!response.ok) {
