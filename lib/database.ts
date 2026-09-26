@@ -31,7 +31,8 @@ if (DATABASE_URL) {
   pgPool = new Pool({
     connectionString: DATABASE_URL,
     ssl: DATABASE_URL.includes("localhost") ? false : { rejectUnauthorized: false },
-    max: 10,
+    max: 5,
+    connectionTimeoutMillis: 10000,
     idleTimeoutMillis: 30000,
   });
 }
@@ -67,7 +68,9 @@ export async function getDatabaseStatus(): Promise<{
           isProduction: true,
           hasDatabaseUrl: true,
         };
-      } catch {
+      } catch (err) {
+        const error = err as Error & { code?: string };
+        console.error("Database connection failure code:", error.code || error.name, error.message);
         return {
           ready: false,
           isProduction: true,
