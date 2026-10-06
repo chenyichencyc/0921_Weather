@@ -1,5 +1,5 @@
 export interface ForecastRecord {
-  id: number;
+  id?: number;
   city: string;
   forecastStart: string;
   forecastEnd: string;
@@ -10,7 +10,16 @@ export interface ForecastRecord {
   weatherDescription: string;
   rainProbability: number | null;
   sourceUpdatedAt: string | null;
-  createdAt: string;
+  createdAt?: string;
+}
+
+export type WeatherDataSource = "cwa" | "database-cache";
+
+export interface WeatherApiResponse {
+  source: WeatherDataSource;
+  count: number;
+  data: ForecastRecord[];
+  error?: string;
 }
 
 export const TAIWAN_CITIES = [
@@ -19,3 +28,4 @@ export const TAIWAN_CITIES = [
   "嘉義縣", "臺南市", "高雄市", "屏東縣", "宜蘭縣", "花蓮縣",
   "臺東縣", "澎湖縣", "金門縣", "連江縣"
 ];
+

@@ -57,7 +57,9 @@ export async function fetchCwaForecasts(apiKey: string): Promise<ParsedCwaRecord
       Accept: "application/json",
     },
     cache: "no-store",
+    signal: AbortSignal.timeout(5000),
   });
+
 
   if (!response.ok) {
     throw new Error(`CWA API 回應錯誤，狀態碼: ${response.status}`);

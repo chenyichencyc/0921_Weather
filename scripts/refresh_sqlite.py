@@ -4,8 +4,13 @@ import sqlite3
 import sys
 from datetime import datetime
 from pathlib import Path
+import pandas as pd
 import requests
-from dotenv import load_dotenv
+try:
+    from init_sqlite import SCHEMA_SQL, init_database
+except ImportError:
+    from scripts.init_sqlite import SCHEMA_SQL, init_database
+
 
 # 路徑設定
 ROOT_DIR = Path(__file__).resolve().parent.parent
@@ -61,12 +66,12 @@ def fetch_cwa_data(api_key: str) -> dict:
         if response.status_code != 200:
             print(f"❌ 錯誤：CWA API 請求失敗，HTTP 狀態碼: {response.status_code}", file=sys.stderr)
             sys.exit(1)
-        
+
         data = response.json()
         if not data.get("success") or "records" not in data or "location" not in data["records"]:
             print("❌ 錯誤：CWA API 回傳 JSON 結構異常，缺少 records.location", file=sys.stderr)
             sys.exit(1)
-            
+
         return data
     except requests.RequestException as e:
         # 遮蔽可能的 URL 查詢參數包含的金鑰
@@ -75,9 +80,9 @@ def fetch_cwa_data(api_key: str) -> dict:
         sys.exit(1)
 
 
-def parse_weather_records(data: dict) -> list[tuple]:
-    """解析並清理 CWA 預報資料"""
-    records_list = []
+def normalize_cwa_to_dataframe(data: dict) -> pd.DataFrame:
+    """使用 Pandas 將 CWA 預報 JSON 正規化為結構化 DataFrame"""
+    raw_rows = []
     locations = data["records"]["location"]
     source_updated_at = datetime.now().isoformat()
 
@@ -104,47 +109,82 @@ def parse_weather_records(data: dict) -> list[tuple]:
             if not end_time:
                 continue
 
-            # 日期部分 YYYY-MM-DD
-            forecast_date = start_time.split(" ")[0] if " " in start_time else start_time[:10]
+            raw_rows.append({
+                "city": city,
+                "forecast_start": start_time,
+                "forecast_end": end_time,
+                "min_temp_raw": min_entry.get("parameter", {}).get("parameterName"),
+                "max_temp_raw": max_entry.get("parameter", {}).get("parameterName"),
+                "weather_description": wx_entry.get("parameter", {}).get("parameterName", ""),
+                "rain_probability_raw": pop_entry.get("parameter", {}).get("parameterName"),
+                "source_updated_at": source_updated_at,
+            })
 
-            # 溫度轉數字
-            try:
-                min_temp = float(min_entry.get("parameter", {}).get("parameterName", 0))
-                max_temp = float(max_entry.get("parameter", {}).get("parameterName", 0))
-            except (ValueError, TypeError):
-                continue
+    if not raw_rows:
+        return pd.DataFrame()
 
-            avg_temp = round((min_temp + max_temp) / 2.0, 1)
-            wx_desc = wx_entry.get("parameter", {}).get("parameterName", "")
-            
-            pop_raw = pop_entry.get("parameter", {}).get("parameterName", "")
-            pop = int(pop_raw) if pop_raw.isdigit() else None
+    # 轉為 Pandas DataFrame 進行資料清理與型別轉換
+    df = pd.DataFrame(raw_rows)
 
-            records_list.append((
-                city,
-                start_time,
-                end_time,
-                forecast_date,
-                min_temp,
-                max_temp,
-                avg_temp,
-                wx_desc,
-                pop,
-                source_updated_at
-            ))
+    # 數值型別轉換與清理
+    df["min_temp"] = pd.to_numeric(df["min_temp_raw"], errors="coerce")
+    df["max_temp"] = pd.to_numeric(df["max_temp_raw"], errors="coerce")
+    df = df.dropna(subset=["min_temp", "max_temp"]).copy()
 
-    return records_list
+    # 計算平均溫
+    df["avg_temp"] = ((df["min_temp"] + df["max_temp"]) / 2.0).round(1)
+
+    # 提取預報日期 YYYY-MM-DD
+    df["forecast_date"] = df["forecast_start"].apply(
+        lambda s: s.split(" ")[0] if " " in str(s) else str(s)[:10]
+    )
+
+    # 處理降雨機率
+    df["rain_probability"] = pd.to_numeric(df["rain_probability_raw"], errors="coerce").astype("Int64")
+
+    # 選取標準欄位順序
+    target_cols = [
+        "city",
+        "forecast_start",
+        "forecast_end",
+        "forecast_date",
+        "min_temp",
+        "max_temp",
+        "avg_temp",
+        "weather_description",
+        "rain_probability",
+        "source_updated_at",
+    ]
+    return df[target_cols]
 
 
-def save_to_sqlite(records: list[tuple], db_path: Path = DB_PATH) -> int:
-    """使用 Transaction 與 Upsert 寫入 SQLite"""
+def save_dataframe_to_sqlite(df: pd.DataFrame, db_path: Path = DB_PATH) -> int:
+    """使用 Pandas DataFrame 搭配 Transaction 與 Upsert 寫入 SQLite"""
+    if df.empty:
+        return 0
+
     DATA_DIR.mkdir(parents=True, exist_ok=True)
+    init_database(db_path)
+
+    # 將 DataFrame 轉換為適合 SQLite executemany 的 tuple 陣列 (處理 NA -> None)
+    records = []
+    for row in df.to_dict(orient="records"):
+        records.append((
+            row["city"],
+            row["forecast_start"],
+            row["forecast_end"],
+            row["forecast_date"],
+            float(row["min_temp"]),
+            float(row["max_temp"]),
+            float(row["avg_temp"]),
+            str(row["weather_description"]),
+            int(row["rain_probability"]) if pd.notna(row["rain_probability"]) else None,
+            row["source_updated_at"],
+        ))
+
     conn = sqlite3.connect(db_path)
     try:
         with conn:
-            # 確保資料表已存在
-            from init_sqlite import SCHEMA_SQL
-            conn.executescript(SCHEMA_SQL)
             conn.executemany(UPSERT_SQL, records)
         return len(records)
     finally:
@@ -152,21 +192,26 @@ def save_to_sqlite(records: list[tuple], db_path: Path = DB_PATH) -> int:
 
 
 def main():
-    print("=== 開始自 CWA API 更新天氣資料至 SQLite ===")
+    print("=== 開始自 CWA API 更新天氣資料至 SQLite (Pandas 管線) ===")
     api_key = get_api_key()
     raw_data = fetch_cwa_data(api_key)
-    parsed_records = parse_weather_records(raw_data)
     
-    if not parsed_records:
+    # 透過 Pandas 進行結構化清理與轉換
+    df = normalize_cwa_to_dataframe(raw_data)
+    if df.empty:
         print("⚠️ 未解析到任何預報資料。")
         return
 
-    written_count = save_to_sqlite(parsed_records)
-    distinct_cities = len(set(r[0] for r in parsed_records))
+    written_count = save_dataframe_to_sqlite(df)
+    distinct_cities = df["city"].nunique()
     
-    print(f" 成功寫入/更新 {written_count} 筆預報資料（涵蓋 {distinct_cities} 個縣市）")
-    print(f" 資料庫檔案: {DB_PATH}")
+    print(f"✅ 成功寫入/更新 {written_count} 筆預報資料（涵蓋 {distinct_cities} 個縣市）")
+    print(f"📊 Pandas DataFrame 摘要:")
+    print(f"   - 欄位數: {df.shape[1]}, 總列數: {df.shape[0]}")
+    print(f"   - 氣溫範圍: {df['min_temp'].min()}°C ~ {df['max_temp'].max()}°C")
+    print(f"💾 資料庫檔案: {DB_PATH}")
 
 
 if __name__ == "__main__":
     main()
+

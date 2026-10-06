@@ -1,42 +1,38 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
-  getDatabaseStatus,
   getForecastsByDate,
   getForecastsByCity,
   upsertForecastRecords,
 } from "@/lib/database";
-import { fetchCwaForecasts } from "@/lib/cwa";
+import { fetchCwaForecasts, ParsedCwaRecord } from "@/lib/cwa";
+import { ForecastRecord, WeatherApiResponse } from "@/types/weather";
 
 export const runtime = "nodejs";
 
 const DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/;
 
-// 記憶體內同步時間戳，避免短時間內對 CWA 頻繁重複請求 (限制 5 分鐘同步一次)
-let lastCwaSyncTime = 0;
-const SYNC_INTERVAL_MS = 5 * 60 * 1000;
+// 5 分鐘記憶體快取 (單一 Vercel Function instance 節流優化)
+let cwaCache: { records: ParsedCwaRecord[]; timestamp: number } | null = null;
+const CWA_CACHE_TTL_MS = 5 * 60 * 1000;
 
-async function syncWithCwaIfPossible() {
-  const cwaApiKey = process.env.CWA_API_KEY;
-  if (!cwaApiKey || !cwaApiKey.trim()) {
-    // 缺少 CWA_API_KEY 時：不向 CWA 發送請求，安全回退讀取現有資料庫
-    return;
-  }
-
-  const now = Date.now();
-  if (now - lastCwaSyncTime < SYNC_INTERVAL_MS) {
-    return;
-  }
-
-  try {
-    const freshRecords = await fetchCwaForecasts(cwaApiKey);
-    if (freshRecords.length > 0) {
-      await upsertForecastRecords(freshRecords);
-      lastCwaSyncTime = now;
-    }
-  } catch {
-    // 安全捕捉：記錄安全錯誤訊息，不洩漏 API Key 或連線字串
-    console.warn("CWA background sync notice: unable to sync fresh data, serving cached database records.");
-  }
+/**
+ * 將 ParsedCwaRecord 轉換為相容前端的 ForecastRecord
+ */
+function toForecastRecord(r: ParsedCwaRecord, index: number): ForecastRecord {
+  return {
+    id: index + 1,
+    city: r.city,
+    forecastStart: r.forecastStart,
+    forecastEnd: r.forecastEnd,
+    forecastDate: r.forecastDate,
+    minTemp: r.minTemp,
+    maxTemp: r.maxTemp,
+    avgTemp: r.avgTemp,
+    weatherDescription: r.weatherDescription,
+    rainProbability: r.rainProbability,
+    sourceUpdatedAt: r.sourceUpdatedAt,
+    createdAt: r.sourceUpdatedAt,
+  };
 }
 
 export async function GET(request: NextRequest) {
@@ -59,71 +55,126 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  // 2. 檢查資料庫狀態 (正式環境若缺少 DATABASE_URL 必須回傳 HTTP 503)
-  const dbStatus = await getDatabaseStatus();
-  if (!dbStatus.ready) {
+  if (date && !DATE_REGEX.test(date)) {
     return NextResponse.json(
-      {
-        error: dbStatus.error || "資料庫服務無法連線",
-      },
-      { status: 503 }
+      { error: "日期格式無效，請使用 YYYY-MM-DD 格式 (例如: 2026-09-21)" },
+      { status: 400 }
     );
   }
 
-  // 3. 若有設定 CWA_API_KEY，伺服器端嘗試同步最新氣象資料
-  await syncWithCwaIfPossible();
+  const trimmedCity = city ? city.trim() : null;
+  if (city !== null && (!trimmedCity || trimmedCity.length === 0)) {
+    return NextResponse.json(
+      { error: "縣市名稱不可為空" },
+      { status: 400 }
+    );
+  }
 
-  try {
-    // 4. 依據 date 查詢全台資料
-    if (date) {
-      if (!DATE_REGEX.test(date)) {
-        return NextResponse.json(
-          { error: "日期格式無效，請使用 YYYY-MM-DD 格式 (例如: 2026-09-21)" },
-          { status: 400 }
-        );
+  // 2. CWA 直接優先策略 (CWA First)
+  let cwaRecords: ParsedCwaRecord[] | null = null;
+  const now = Date.now();
+
+  // (A) 檢查單一 instance 記憶體快取是否仍有效 (5 分鐘)
+  if (cwaCache && now - cwaCache.timestamp < CWA_CACHE_TTL_MS) {
+    cwaRecords = cwaCache.records;
+  } else {
+    // (B) 若無有效快取，伺服器端使用 CWA_API_KEY 向 CWA API 請求最新預報
+    const cwaApiKey = process.env.CWA_API_KEY;
+    if (cwaApiKey && cwaApiKey.trim().length > 0) {
+      try {
+        const freshRecords = await fetchCwaForecasts(cwaApiKey.trim());
+        if (freshRecords && freshRecords.length > 0) {
+          cwaRecords = freshRecords;
+          cwaCache = {
+            records: freshRecords,
+            timestamp: now,
+          };
+
+          // (C) 非阻塞 / best-effort 寫入 Supabase (或本機 SQLite)
+          // 附帶短暫 timeout，寫入失敗絕不影響向前端回傳 CWA 資料
+          Promise.race([
+            upsertForecastRecords(freshRecords),
+            new Promise((_, reject) =>
+              setTimeout(() => reject(new Error("Database upsert timeout")), 3000)
+            ),
+          ]).catch((err) => {
+            console.warn("Best-effort DB upsert notice (non-fatal):", (err as Error).message);
+          });
+        }
+      } catch (err) {
+        console.warn("CWA API fetch failed, falling back to database cache:", (err as Error).message);
       }
+    }
+  }
 
-      const records = await getForecastsByDate(date);
-      if (records.length === 0) {
+  // 3. 若成功取得 CWA 資料 (包含 5 分鐘快取)，立刻回傳給前端 (source: "cwa")
+  if (cwaRecords && cwaRecords.length > 0) {
+    if (date) {
+      const filtered = cwaRecords.filter((r) => r.forecastDate === date);
+      if (filtered.length === 0) {
         return NextResponse.json(
           { error: `找不到日期為 ${date} 的預報資料` },
           { status: 404 }
         );
       }
-
-      return NextResponse.json({
-        count: records.length,
-        data: records,
-      });
+      const responseBody: WeatherApiResponse = {
+        source: "cwa",
+        count: filtered.length,
+        data: filtered.map(toForecastRecord),
+      };
+      return NextResponse.json(responseBody);
     }
 
-    // 5. 依據 city 查詢指定縣市資料
-    if (city) {
-      const trimmedCity = city.trim();
-      if (!trimmedCity) {
-        return NextResponse.json(
-          { error: "縣市名稱不可為空" },
-          { status: 400 }
-        );
-      }
-
-      const records = await getForecastsByCity(trimmedCity);
-      if (records.length === 0) {
+    if (trimmedCity) {
+      const filtered = cwaRecords.filter((r) => r.city === trimmedCity);
+      if (filtered.length === 0) {
         return NextResponse.json(
           { error: `找不到縣市為「${trimmedCity}」的預報資料` },
           { status: 404 }
         );
       }
-
-      return NextResponse.json({
-        count: records.length,
-        data: records,
-      });
+      const responseBody: WeatherApiResponse = {
+        source: "cwa",
+        count: filtered.length,
+        data: filtered.map(toForecastRecord),
+      };
+      return NextResponse.json(responseBody);
     }
-  } catch {
-    return NextResponse.json(
-      { error: "伺服器內部錯誤，無法讀取天氣資料" },
-      { status: 500 }
-    );
   }
+
+  // 4. CWA 無法使用時，才嘗試從 Supabase (或本機開發 SQLite) 讀取最後一次成功同步的資料 (source: "database-cache")
+  try {
+    if (date) {
+      const dbRecords = await getForecastsByDate(date);
+      if (dbRecords && dbRecords.length > 0) {
+        const responseBody: WeatherApiResponse = {
+          source: "database-cache",
+          count: dbRecords.length,
+          data: dbRecords,
+        };
+        return NextResponse.json(responseBody);
+      }
+    }
+
+    if (trimmedCity) {
+      const dbRecords = await getForecastsByCity(trimmedCity);
+      if (dbRecords && dbRecords.length > 0) {
+        const responseBody: WeatherApiResponse = {
+          source: "database-cache",
+          count: dbRecords.length,
+          data: dbRecords,
+        };
+        return NextResponse.json(responseBody);
+      }
+    }
+  } catch (err) {
+    console.warn("Database fallback query failed:", (err as Error).message);
+  }
+
+  // 5. 只有 CWA 與 Supabase 都無法提供資料時，才回傳 HTTP 503
+  return NextResponse.json(
+    { error: "天氣資料服務暫時無法使用 (CWA 與資料庫備援皆無法取得資料)" },
+    { status: 503 }
+  );
 }
+
