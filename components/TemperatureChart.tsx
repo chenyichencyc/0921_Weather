@@ -56,10 +56,10 @@ export default function TemperatureChart({ data, city }: TemperatureChartProps) 
       <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-6 pb-4 border-b border-slate-100 dark:border-slate-700/60 gap-2">
         <div>
           <h3 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
-            <span>📈</span> {city} 36 小時氣溫變化趨勢
+            <span>📈</span> {city} 預報氣溫變化趨勢 (未來一週)
           </h3>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-            呈現各預報時段之最低與最高氣溫走勢
+            呈現未來一週各預報時段之最低與最高氣溫走勢
           </p>
         </div>
       </div>

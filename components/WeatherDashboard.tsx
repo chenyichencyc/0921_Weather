@@ -154,6 +154,12 @@ export default function WeatherDashboard() {
     return Array.from(map.values());
   }, [activeCityForecasts]);
 
+  // 依選取之日期過濾可用時段（保持時段選單簡潔清楚）
+  const displayedIntervals = useMemo(() => {
+    const forSelectedDate = availableIntervals.filter((i) => i.date === selectedDate);
+    return forSelectedDate.length > 0 ? forSelectedDate : availableIntervals;
+  }, [availableIntervals, selectedDate]);
+
   // 當使用者選取時段時，自動同步對應的 date
   const handleIntervalChange = (newKey: string) => {
     setSelectedIntervalKey(newKey);
@@ -262,10 +268,10 @@ export default function WeatherDashboard() {
             <select
               value={selectedIntervalKey}
               onChange={(e) => handleIntervalChange(e.target.value)}
-              disabled={availableIntervals.length === 0}
+              disabled={displayedIntervals.length === 0}
               className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl text-sm font-medium text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none disabled:opacity-50"
             >
-              {availableIntervals.map((i) => (
+              {displayedIntervals.map((i) => (
                 <option key={i.key} value={i.key}>
                   {i.label}
                 </option>
