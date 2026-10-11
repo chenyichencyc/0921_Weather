@@ -113,6 +113,11 @@ export default function TemperatureCards({ record, city }: TemperatureCardsProps
           </span>
           <span className="text-slate-500 text-sm font-medium">%</span>
         </div>
+        {record.rainProbability === null && (
+          <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-1">
+            （氣象署官方僅提供前 4 天降雨機率）
+          </p>
+        )}
         <div className="w-full bg-slate-100 dark:bg-slate-700 rounded-full h-1.5 mt-3 overflow-hidden">
           <div
             className="bg-indigo-500 h-1.5 rounded-full transition-all duration-500"

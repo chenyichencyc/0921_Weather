@@ -107,6 +107,11 @@ export default function ForecastTable({
           </tbody>
         </table>
       </div>
+      <div className="mt-3 text-right">
+        <span className="text-[11px] text-slate-400 dark:text-slate-500">
+          * 註：中央氣象署官方僅發布未來 4 天內之降雨機率預報，第 5 天起依官方格式顯示為 --
+        </span>
+      </div>
     </div>
   );
 }
