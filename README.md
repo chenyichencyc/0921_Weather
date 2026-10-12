@@ -61,6 +61,20 @@
 
 ---
 
+## 🗄️ 雙資料庫分工與 Supabase 角色定位
+
+本專案同時採用 **SQLite** 與 **Supabase (PostgreSQL)** 雙資料庫架構，各司其職且互為互補：
+
+| 資料庫 | 應用環境 | 定位與核心任務 | 運作機制 |
+| :--- | :--- | :--- | :--- |
+| **SQLite**<br>(`data/weather.db` / `data.db`) | **本機端**<br>Python / Streamlit 課程版 | **課程作業標準實作**<br>(海報步驟 8～12) | 供 Python 腳本清洗資料後寫入，並由 Streamlit 透過 SQL 直接查詢視覺化。 |
+| **Supabase**<br>(PostgreSQL) | **雲端生產環境**<br>Next.js / Vercel 正式版 | **雲端備份與斷線高可用備援**<br>(Failover Fallback) | 平時由後端背景非阻塞寫入備份；若 CWA 官方 API 遭遇維護或限流斷線，自動降級改讀 Supabase，確保線上網站永不掛掉。 |
+
+> 💡 **為什麼線上網站平時優先顯示 CWA 即時資料？**  
+> 氣象預報高度講求即時性。本專案採用 **CWA-First（官方優先）** 設計：平時確保使用者看見當下最新的一手數值，並於背景非阻塞同步至 Supabase 儲存庫；Supabase 作為「強健後盾」，消除了單點故障風險，兼顧**資料即時性**與**高可用性 (High Availability)**。
+
+---
+
 ## 🚀 快速啟動流程 (Quick Start)
 
 ### 方案 A：課程標準版 (Python + Streamlit + SQLite)
