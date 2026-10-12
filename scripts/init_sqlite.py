@@ -26,6 +26,21 @@ CREATE TABLE IF NOT EXISTS forecasts (
 CREATE INDEX IF NOT EXISTS idx_forecasts_city ON forecasts(city);
 CREATE INDEX IF NOT EXISTS idx_forecasts_date ON forecasts(forecast_date);
 CREATE INDEX IF NOT EXISTS idx_forecasts_start ON forecasts(forecast_start);
+
+-- 課程微課程海報步驟 9/10/12 相容 View: TemperatureForecasts
+CREATE VIEW IF NOT EXISTS TemperatureForecasts AS
+SELECT
+    id,
+    city AS regionName,
+    forecast_date AS dataDate,
+    min_temp AS minT,
+    max_temp AS maxT,
+    avg_temp AS avgT,
+    weather_description,
+    rain_probability,
+    forecast_start,
+    forecast_end
+FROM forecasts;
 """
 
 
@@ -38,6 +53,14 @@ def init_database(db_path: Path = DB_PATH):
         print(f" SQLite 資料庫初始化成功: {db_path}")
     finally:
         conn.close()
+
+    # 海報微課程相容：若根目錄需要 data.db，亦建立相容副本或符號連結
+    root_data_db = ROOT_DIR / "data.db"
+    try:
+        if not root_data_db.exists():
+            root_data_db.symlink_to(db_path)
+    except Exception:
+        pass
 
 
 if __name__ == "__main__":
